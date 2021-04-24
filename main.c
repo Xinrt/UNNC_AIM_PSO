@@ -8,7 +8,7 @@
 /* global parameters */
 int RAND_SEED[] = {1,20,30,40,50,60,70,80,90,100,110, 120, 130, 140, 150, 160, 170, 180, 190, 200};
 int NUM_OF_RUNS = 1;
-int MAX_TIME = 30;  //max amount of time permited (in sec)
+int MAX_TIME = 30;  //max amount of time permitted (in sec)
 int num_of_problems;
 clock_t START_TIME, STOP_TIME;
 
@@ -16,15 +16,16 @@ clock_t START_TIME, STOP_TIME;
 int SWARM_SIZE=30;    // [20, 40]
 int MAX_NUM_OF_ITER = 10000;
 // range of particle's velocity and position
-const float V_MAX=8;
+const float V_MAX=10;
 
 
 // coefficient
-int Cp = 1;   // <=2
-int Cg = 1;   // <=2
-float w = 0.6;  // [0.4, 0.9]
+double Cp = 0.5;   // <=2
+double Cg = 2.5;   // <=2
+double w = 0.8;  // [0.4, 0.9]
 
 struct solution_struct best_sln;  //global best solution
+struct solution_struct average_pb_sln;  //average personal best solution
 
 //return a random number between 0 and 1
 float rand_01()
@@ -334,10 +335,19 @@ void feasibility_repair(struct solution_struct* pop)
         }
         item_i->ratio = item_i->p/avg_size;
     }
+
+//    printf("++++++++++++++++++++++++++++++++++++++++++++++\n");
+//    for(int m=0; m<pop->prob->n; m++) {
+//        printf("%d", pop->x[m]);
+//        printf("+%f ", pop->prob->items->ratio);
+//    }
+//    printf("\n");
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc1);
 //    for(int m=0; m<pop->prob->n; m++) {
-//        printf("%f\n", pop->prob->items[m].ratio);
+//        printf("%d", pop->prob->items[m].indx);
+////        printf("+%f ", pop->prob->items->ratio);
 //    }
+//    printf("\n");
 //    printf("------------------------------------------\n");
 
 
@@ -347,8 +357,8 @@ void feasibility_repair(struct solution_struct* pop)
 //        printf("aaaaaaaa\n");
         for(int i=(pop->prob->n)-1; i>=0;i--){
 //            printf("f1: %d\n", pop->feasibility);
-            if(pop->x[i]==1) {
-                pop->x[i] = 0;
+            if(pop->x[pop->prob->items[i].indx]==1) {
+                pop->x[pop->prob->items[i].indx] = 0;
                 check_feasibility(pop);
 //                printf("f2: %d\n", pop->feasibility);
                 if(pop->feasibility>0) {
@@ -358,26 +368,27 @@ void feasibility_repair(struct solution_struct* pop)
         }
     } else {
         for(int i=0; i<pop->prob->n;i++){
-            if(pop->x[i]==0) {
-                pop->x[i] = 1;
+            if(pop->x[pop->prob->items[i].indx]==0) {
+                pop->x[pop->prob->items[i].indx] = 1;
                 check_feasibility(pop);
                 if(pop->feasibility<0) {
-                    pop->x[i] = 0;
+                    pop->x[pop->prob->items[i].indx] = 0;
+                    check_feasibility(pop);
                     break;
                 }
             }
         }
     }
-    pop->objective=0;
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc2);
 //    for(int m=0; m<pop->prob->n; m++) {
 //        printf("%d", pop->prob->items[m].indx);
 //    }
 //    printf("------------------------------------------\n");
-
+    pop->objective=0;
     for(int m=0; m<pop->prob->n; m++) {
         pop->objective += pop->x[m] * pop->prob->items[m].p;
     }
+//    printf("feasibility: %d\n", pop->feasibility);
 }
 
 
@@ -390,19 +401,29 @@ void update_best_solution(struct solution_struct* sln)
 }
 
 
-
+/**
+ * initialize particle swarm, give initial position, velocity, personal best and global best
+ * ignore the feasibility of each particle
+ */
 int initialize_particle_swarm(struct problem_struct* prob, struct solution_struct* sln) {
     for(int i=0; i<SWARM_SIZE; i++) {
+        // malloc spaces
+        sln[i].objective = 0;
         sln[i].prob = prob;
         sln[i].x = malloc(sizeof(int)*prob->n);
         sln[i].cap_left = malloc(sizeof(int)*prob->dim);
-        sln[i].v = malloc(sizeof(int)*prob->n);
-        sln[i].personal_best = malloc(sizeof(struct solution_struct)*prob->n);
-        sln[i].objective = 0;
+        sln[i].v = malloc(sizeof(float )*prob->n);
+//        sln[i].personal_best = malloc(sizeof(struct solution_struct)*prob->n);
+        sln[i].personal_best = malloc(sizeof(struct solution_struct));
+        sln[i].personal_best->cap_left = malloc(sizeof(int)*sln[i].prob->dim);
+        sln[i].personal_best->x = malloc(sizeof(int)*sln[i].prob->n);
 
-//        copy_solution(sln[i].personal_best, &sln[i]);
-        sln[i].personal_best=&sln[i];
-        best_sln=sln[0];
+        // initially assign particle itself as personal best
+        copy_solution(sln[i].personal_best, &sln[i]);
+//        sln[i].personal_best=&sln[i];
+
+        // initialize value of particle's position, velocity and calculate the objective value
+        // ignore the feasibility of the particle
         for(int j=0; j<prob->n; j++) {
             sln[i].x[j] = rand()%2;
             sln[i].objective += sln[i].x[j] * sln[i].prob->items[j].p;
@@ -410,6 +431,8 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
         }
     }
 
+    // find the biggest objective and reassign the global best particle
+    best_sln=sln[0];    // initially assign first particle as global best
     float max_objective = sln[0].objective;
     for(int i=0; i<SWARM_SIZE; i++) {
         if(sln[i].objective>max_objective) {
@@ -417,6 +440,7 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
             best_sln=sln[i];
         }
     }
+//    printf("objective %f\n", best_sln.objective);
 }
 
 
@@ -424,7 +448,7 @@ void update(struct solution_struct* swarm){
     for(int i=0; i<SWARM_SIZE; i++) {
 //        swarm[i].x = malloc(sizeof(int)*swarm->prob->n);
 //        swarm[i].cap_left = malloc(sizeof(int)*swarm->prob->dim);
-        swarm[i].objective = 0;
+        swarm[i].objective = 0;   // before update each particle, clear its objective value
 
         for(int j=0; j<swarm->prob->n; j++) {
             float pp = rand_01();
@@ -438,7 +462,7 @@ void update(struct solution_struct* swarm){
                 swarm[i].v[j]=-V_MAX;
             }
 
-            // sigmoid type fucntion, move to new position
+            // sigmoid type function, move to new position
             float random_number = rand_01();
             if(random_number>=1/(1+exp(-swarm[i].v[j]))) {
                 swarm[i].x[j]=0;
@@ -446,8 +470,12 @@ void update(struct solution_struct* swarm){
                 swarm[i].x[j]=1;
             }
 
+//            printf("%f ", 1/(1+exp(-swarm[i].v[j])));
+
+            // recalculate the objective
             swarm[i].objective += swarm[i].x[j] * swarm[i].prob->items[j].p;
         }
+//        printf("\n");
     }
 
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -463,6 +491,88 @@ void update(struct solution_struct* swarm){
     }
 }
 
+void  minority_subordinate_majority(struct solution_struct* swarm){
+    float *float_average_pb = malloc(sizeof(float )*swarm->prob->n);
+//    int *average_pb = malloc(sizeof(int)*swarm->prob->n);
+    average_pb_sln.x = malloc(sizeof(int)*swarm->prob->n);
+
+    // get the average personal best
+    for(int i=0; i<SWARM_SIZE; i++) {
+        for(int j=0; j<swarm->prob->n; j++) {
+            float_average_pb[j] += (float)swarm[i].personal_best->x[j];
+        }
+    }
+
+    for(int j=0; j<swarm->prob->n; j++) {
+        float_average_pb[j] = float_average_pb[j]/(float)SWARM_SIZE;
+//        printf("%f ", float_average_pb[j]);
+    }
+//    printf("\n");
+
+    // normalize average personal best into 0/1
+    for(int j=0; j<swarm->prob->n; j++) {
+        if(float_average_pb[j]>=0.5) {
+            average_pb_sln.x[j]=1;
+        } else {
+            average_pb_sln.x[j]=0;
+        }
+//        printf("%d ", average_pb_sln.x[j]);
+    }
+
+    // Bayes formula
+    // P1: correctness of personal best
+    // P2: correctness of average personal best
+    int n_correctness_personal=0;
+    int n_correctness_avg_personal=0;
+    for(int i=0; i<SWARM_SIZE; i++) {
+        for(int j=0; j<swarm->prob->n; j++) {
+            if(swarm[i].personal_best->x[j] == swarm->x[j]) {
+                n_correctness_personal++;
+            }
+            if(average_pb_sln.x[j] == swarm->x[j]) {
+                n_correctness_avg_personal++;
+            }
+        }
+
+        double P1 = n_correctness_personal/(double) swarm->prob->n;
+        double P2 = n_correctness_avg_personal/(double) swarm->prob->n;
+        double alpha = (P1*P2) / (P1*P2 + (1-P1)*(1-P2));
+        double beta = ((1-P2)*P1) / ((1-P1)*P2 + (1-P2)*P1);
+
+
+        for(int j=0; j<swarm->prob->n; j++) {
+            double r = rand();
+            if(average_pb_sln.x[j]==1 && swarm[i].personal_best->x[j]==1) {
+                if(r<alpha) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else if (average_pb_sln.x[j]==0 && swarm[i].personal_best->x[j]==0) {
+                if(r<(1-alpha)) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else if(average_pb_sln.x[j]==1 && swarm[i].personal_best->x[j]==0) {
+                if(r<beta) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else {
+                if(r<(1-beta)) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            }
+        }
+    }
+
+
+
+}
 
 
 int PSO(struct problem_struct* prob) {
@@ -470,17 +580,16 @@ int PSO(struct problem_struct* prob) {
     double time_spent=0;
     int iter =0;
 
+    // create a particle swarm with size SWARM_SIZE
     struct solution_struct particle_swarm[SWARM_SIZE];
+    // initialize the particle swarm
     initialize_particle_swarm(prob, particle_swarm);
 
     while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
+//        update(particle_swarm);
+        minority_subordinate_majority(particle_swarm);
         update(particle_swarm);
-        // selection(mating_pool, parent_pop);
-        // cross_over(mating_pool);
-        // mutation(mating_pool);
-        // feasibility_repair(mating_pool);
-        // varaible_neighbourhood_search(mating_pool);
-        // replacement(mating_pool, parent_pop);
+
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;

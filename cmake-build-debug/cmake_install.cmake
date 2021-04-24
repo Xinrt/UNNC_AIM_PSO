@@ -1,4 +1,4 @@
-# Install script for directory: E:/UNNC/Y3_spring/AIM/CW/cw/code/github/AIM_CW_PSO
+# Install script for directory: E:/UNNC/Y3_spring/AIM/CW/cw/code/git/AIM_CW_PSO
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -45,5 +45,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "E:/UNNC/Y3_spring/AIM/CW/cw/code/github/AIM_CW_PSO/cmake-build-debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "E:/UNNC/Y3_spring/AIM/CW/cw/code/git/AIM_CW_PSO/cmake-build-debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

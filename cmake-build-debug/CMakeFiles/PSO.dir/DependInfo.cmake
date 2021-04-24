@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_C
-  "E:/UNNC/Y3_spring/AIM/CW/cw/code/github/AIM_CW_PSO/main.c" "E:/UNNC/Y3_spring/AIM/CW/cw/code/github/AIM_CW_PSO/cmake-build-debug/CMakeFiles/PSO.dir/main.c.obj"
+  "E:/UNNC/Y3_spring/AIM/CW/cw/code/git/AIM_CW_PSO/main.c" "E:/UNNC/Y3_spring/AIM/CW/cw/code/git/AIM_CW_PSO/cmake-build-debug/CMakeFiles/PSO.dir/main.c.obj"
   )
 set(CMAKE_C_COMPILER_ID "GNU")
 
