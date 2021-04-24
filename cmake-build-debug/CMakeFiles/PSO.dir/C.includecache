@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+E:/UNNC/Y3_spring/AIM/CW/cw/code/github/AIM_CW_PSO/main.c
+stdio.h
+-
+math.h
+-
+stdlib.h
+-
+time.h
+-
+stdbool.h
+-
+string.h
+-
+
