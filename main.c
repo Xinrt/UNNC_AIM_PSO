@@ -12,6 +12,10 @@ int MAX_TIME = 30;  //max amount of time permitted (in sec)
 int num_of_problems;
 clock_t START_TIME, STOP_TIME;
 
+/* parameters for VSN algorithm */
+int K= 2; // k-opt is used
+int VNS_SWAP_NUM = 10000;
+
 /* parameters for PSO algorithms */
 int SWARM_SIZE=30;    // [20, 40]
 int MAX_NUM_OF_ITER = 10000;
@@ -20,9 +24,16 @@ const float V_MAX=10;
 
 
 // coefficient
-double Cp = 0.5;   // <=2
-double Cg = 2.5;   // <=2
-double w = 0.8;  // [0.4, 0.9]
+//double Cp = 0.5;   // <=2
+//double Cg = 2.5;   // <=2
+//double w = 0.8;  // [0.4, 0.9]
+
+double Cp_i = 2.5;   // <=2
+double Cp_f = 0.5;
+double Cg_f = 2.5;   // <=2
+double Cg_i = 0.5;
+double w_max = 0.9;  // [0.4, 0.9]
+double w_min = 0.4;
 
 struct solution_struct best_sln;  //global best solution
 struct solution_struct average_pb_sln;  //average personal best solution
@@ -453,8 +464,16 @@ void update(struct solution_struct* swarm){
         for(int j=0; j<swarm->prob->n; j++) {
             float pp = rand_01();
             float pg = rand_01();
+
+            // update coefficient
+            double w = (w_max-w_min)*((MAX_TIME-((double)(clock())/CLOCKS_PER_SEC))/MAX_TIME) + w_min;
+            double Cp = (Cp_f-Cp_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cp_i;
+            double Cg = (Cg_f-Cg_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cg_i;
+
+
             // update velocity
             swarm[i].v[j] = w*swarm[i].v[j] + pp*Cp*(swarm[i].personal_best->x[j]-swarm[i].x[j]) + pg*Cg*(best_sln.x[j]-swarm[i].x[j]);
+
             if(swarm[i].v[j]>V_MAX) {
                 swarm[i].v[j]=V_MAX;
             }
@@ -569,9 +588,6 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
             }
         }
     }
-
-
-
 }
 
 
@@ -589,6 +605,7 @@ int PSO(struct problem_struct* prob) {
 //        update(particle_swarm);
         minority_subordinate_majority(particle_swarm);
         update(particle_swarm);
+//        VNS(particle_swarm);
 
         iter++;
         STOP_TIME=clock();
