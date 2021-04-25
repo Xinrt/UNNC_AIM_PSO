@@ -12,9 +12,12 @@ int MAX_TIME = 30;  //max amount of time permitted (in sec)
 int num_of_problems;
 clock_t START_TIME, STOP_TIME;
 
-/* parameters for VSN algorithm */
-int K= 2; // k-opt is used
-int VNS_SWAP_NUM = 10000;
+/* declare parameters for simulated annealing here */
+float SA_TS =500;
+float SA_TF =1;
+float SA_BETA = 0.00000001;
+int SA_MAX_ITER = 10; //total number of runs.
+int SA_ITER_PER_T = 1; //number of runs per temperature
 
 /* parameters for PSO algorithms */
 int SWARM_SIZE=30;    // [20, 40]
@@ -303,6 +306,79 @@ int check_solutions(struct problem_struct** my_problems, char* solution_file)
     return 0;
 }
 
+//Simulated Annealing
+void SimulatedAnnealing(struct solution_struct* sln)
+{
+    START_TIME = clock();
+    double time_spent=0;
+    int iter =0;
+    double temperature=SA_TS;
+    struct solution_struct* curt_sln = sln;
+//    update_best_solution(curt_sln);
+    struct solution_struct* rand_neighb=malloc(sizeof(struct solution_struct));
+    rand_neighb->cap_left= malloc(sizeof(int)*sln->prob->dim);
+    rand_neighb->x = malloc(sizeof(int)*sln->prob->n);
+    while(iter<SA_MAX_ITER && time_spent < 3 && temperature > SA_TF)
+    {
+        //add your SA code here
+        copy_solution(rand_neighb, curt_sln);
+        int item1, item2;
+
+        // random select
+        item1 = rand_int(0, sln->prob->n-1);
+        if(curt_sln->x[item1] ==1){
+            item2 = rand_int(0, sln->prob->n-1);
+            while(curt_sln->x[item2] ==1){//careful, this might lead to deadloop
+                item2 = rand_int(0, sln->prob->n-1);
+            }
+        }
+        else{
+            item2 = rand_int(0, sln->prob->n-1);
+            while(curt_sln->x[item2] ==0){//careful, this might lead to deadloop
+                item2 = rand_int(0, sln->prob->n-1);
+            }
+            int temp = item1;
+            item1 = item2;
+            item2 = temp;
+        }
+
+        //testing potential constraint violations after swap
+//        bool flag=true;
+//        for(int d=0; d<sln->prob->dim; d++){
+//            if(rand_neighb->cap_left[d] + sln->prob->items[item1].size[d] <
+//                    sln->prob->items[item2].size[d]){
+//                flag=false;
+//                break;
+//            }
+//        }
+//        if(flag){//can swap
+//            float delta = sln->prob->items[item2].p - sln->prob->items[item1].p;
+//            if(delta>=0 || (delta<0 && exp(delta/temperature)> rand_01())){
+//                rand_neighb->x[item1]=0;
+//                rand_neighb->x[item2]=1;
+//                rand_neighb->objective += delta;
+//                for(int d=0; d<sln->prob->dim; d++){
+//                    rand_neighb->cap_left[d] +=  sln->prob->items[item1].size[d] - sln->prob->items[item2].size[d];
+//                }
+//            }
+            rand_neighb->x[item1]=0;
+            rand_neighb->x[item2]=1;
+            copy_solution(curt_sln, rand_neighb);
+            copy_solution(&best_sln, curt_sln);
+
+            temperature = temperature/(1+SA_BETA*temperature);
+            iter++;
+            time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
+
+//            if(iter%100 ==0)
+                printf("tempereature=%0.2f, curt obj =%0.0f,\t best obj=%0.0f\n",temperature, curt_sln->objective, best_sln.objective);
+        }
+
+}
+
+    //output_solution(&best_sln, "SA_debug.txt");
+
+
 void check_feasibility(struct solution_struct* pop) {
     pop->feasibility = 1;
     struct item_struct* items_p = pop->prob->items;
@@ -457,8 +533,6 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
 
 void update(struct solution_struct* swarm){
     for(int i=0; i<SWARM_SIZE; i++) {
-//        swarm[i].x = malloc(sizeof(int)*swarm->prob->n);
-//        swarm[i].cap_left = malloc(sizeof(int)*swarm->prob->dim);
         swarm[i].objective = 0;   // before update each particle, clear its objective value
 
         for(int j=0; j<swarm->prob->n; j++) {
@@ -466,9 +540,14 @@ void update(struct solution_struct* swarm){
             float pg = rand_01();
 
             // update coefficient
-            double w = (w_max-w_min)*((MAX_TIME-((double)(clock())/CLOCKS_PER_SEC))/MAX_TIME) + w_min;
-            double Cp = (Cp_f-Cp_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cp_i;
-            double Cg = (Cg_f-Cg_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cg_i;
+//            double w = (w_max-w_min)*((MAX_TIME-((double)(clock())/CLOCKS_PER_SEC))/MAX_TIME) + w_min;
+//            double Cp = (Cp_f-Cp_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cp_i;
+//            double Cg = (Cg_f-Cg_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cg_i;
+
+            double w=0.7298;
+            double Cp=1.49618;
+            double Cg=1.49618;
+
 
 
             // update velocity
@@ -488,13 +567,9 @@ void update(struct solution_struct* swarm){
             } else {
                 swarm[i].x[j]=1;
             }
-
-//            printf("%f ", 1/(1+exp(-swarm[i].v[j])));
-
             // recalculate the objective
             swarm[i].objective += swarm[i].x[j] * swarm[i].prob->items[j].p;
         }
-//        printf("\n");
     }
 
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -514,6 +589,8 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
     float *float_average_pb = malloc(sizeof(float )*swarm->prob->n);
 //    int *average_pb = malloc(sizeof(int)*swarm->prob->n);
     average_pb_sln.x = malloc(sizeof(int)*swarm->prob->n);
+    double alpha;
+    double beta;
 
     // get the average personal best
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -544,21 +621,22 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
     int n_correctness_personal=0;
     int n_correctness_avg_personal=0;
     for(int i=0; i<SWARM_SIZE; i++) {
-        for(int j=0; j<swarm->prob->n; j++) {
-            if(swarm[i].personal_best->x[j] == swarm->x[j]) {
+        for (int j = 0; j < swarm->prob->n; j++) {
+            if (swarm[i].personal_best->x[j] == swarm->x[j]) {
                 n_correctness_personal++;
             }
-            if(average_pb_sln.x[j] == swarm->x[j]) {
+            if (average_pb_sln.x[j] == swarm->x[j]) {
                 n_correctness_avg_personal++;
             }
         }
 
-        double P1 = n_correctness_personal/(double) swarm->prob->n;
-        double P2 = n_correctness_avg_personal/(double) swarm->prob->n;
-        double alpha = (P1*P2) / (P1*P2 + (1-P1)*(1-P2));
-        double beta = ((1-P2)*P1) / ((1-P1)*P2 + (1-P2)*P1);
+        double P1 = n_correctness_personal / (double) swarm->prob->n;
+        double P2 = n_correctness_avg_personal / (double) swarm->prob->n;
 
+        alpha = (P1 * P2) / (P1 * P2 + (1 - P1) * (1 - P2));
+        beta = ((1 - P2) * P1) / ((1 - P1) * P2 + (1 - P2) * P1);
 
+//
         for(int j=0; j<swarm->prob->n; j++) {
             double r = rand();
             if(average_pb_sln.x[j]==1 && swarm[i].personal_best->x[j]==1) {
@@ -605,14 +683,17 @@ int PSO(struct problem_struct* prob) {
 //        update(particle_swarm);
         minority_subordinate_majority(particle_swarm);
         update(particle_swarm);
+//        SimulatedAnnealing(&best_sln);
+
+
 //        VNS(particle_swarm);
 
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
         //printf("best: %f  worst: %f   iter: %d  time: %f\n", parent_pop[0].objective, parent_pop[POP_SIZE-1].objective, iter, time_spent);
-
     }
+    feasibility_repair(&best_sln);
 
 //     update_best_solution(particle_swarm);
 
@@ -621,7 +702,7 @@ int PSO(struct problem_struct* prob) {
 //    printf("gap: %f  worst: %f   iter: %d  time: %f\n", (parent_pop->prob->optimal-parent_pop[0].objective)/parent_pop->prob->optimal, (parent_pop->prob->optimal-parent_pop[POP_SIZE-1].objective)/parent_pop->prob->optimal, iter, time_spent);
 //    printf("gap: %f  worst: %f   iter: %d  time: %f\n", (particle_swarm->prob->optimal-particle_swarm[0].objective)/particle_swarm->prob->optimal, (particle_swarm->prob->optimal-particle_swarm[SWARM_SIZE-1].objective)/particle_swarm->prob->optimal, iter, time_spent);
 
-    feasibility_repair(&best_sln);
+
 //    printf("best: %f  worst: %f   iter: %d  time: %f\n", best_sln.objective, particle_swarm[SWARM_SIZE-1].objective, iter, time_spent);
     printf("%f\n", best_sln.objective);
 
