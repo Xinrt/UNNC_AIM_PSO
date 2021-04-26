@@ -24,6 +24,7 @@ int SWARM_SIZE=30;    // [20, 40]
 int MAX_NUM_OF_ITER = 10000;
 // range of particle's velocity and position
 const float V_MAX=10;
+double P=20000;
 
 
 // coefficient
@@ -467,48 +468,6 @@ bool apply_move(int nb_indx, int* move, struct solution_struct* sln ){
     return ret;
 }
 
-//two neibourhood: 1-1 swap and 1-2 swap
-struct solution_struct* best_descent(int nb_indx, struct solution_struct* curt_sln){
-    struct solution_struct* best_neighb = malloc(sizeof(struct solution_struct));
-    best_neighb->cap_left = malloc(sizeof(int)*curt_sln->prob->dim);
-    best_neighb->x = malloc(sizeof(int)*curt_sln->prob->n);
-    copy_solution(best_neighb, curt_sln);
-    int n=curt_sln->prob->n;
-    int curt_move[] ={-1,-1,-1}, best_move []={-1,-1,-1}, delta=0, best_delta=0;  //storing best neighbourhood moves
-    //used for spliting the packed and unpacked items into two lists
-    int packed[n], unpacked[n];
-    int packed_index = 0;
-    int unpacked_index = 0;
-
-    //pair swap
-    //divide the items into 2 groups to reduce the time complexity
-    packed_index = 0; unpacked_index = 0;
-    for(int i = 0; i < n; i++){
-        if(curt_sln->x[i] == 1){
-            packed[packed_index] = i;
-            packed_index++;
-        }
-        else{
-            unpacked[unpacked_index] = i;
-            unpacked_index++;
-        }
-    }
-
-    for(int i=0; i<packed_index; i++){
-        for(int j=0; j<unpacked_index; j++){
-            curt_move[0]= packed[i]; curt_move[1]= unpacked[j]; curt_move[2]=-1;
-            if(can_move(nb_indx, &curt_move[0], best_neighb)){
-                delta = curt_sln->prob->items[unpacked[j]].p -curt_sln->prob->items[packed[i]].p;
-                if(delta > best_delta){
-                    best_delta = delta; best_move[0] = packed[i]; best_move[1] = unpacked[j]; best_move[2]=-1;
-                }
-            }
-        }
-    }
-    if(best_delta>0) { apply_move(nb_indx, &best_move[0], best_neighb);}
-    return best_neighb;
-}
-
 //modify the solutions that violate the capacity constraints
 void feasibility_repair(struct solution_struct* pop)
 {
@@ -584,6 +543,120 @@ void update_best_solution(struct solution_struct* sln)
     if(best_sln.objective < sln->objective)
         copy_solution(&best_sln, sln);
 }
+//two neibourhood: 1-1 swap and 1-2 swap
+struct solution_struct* best_descent_vns(int nb_indx, struct solution_struct* curt_sln){
+    struct solution_struct* best_neighb = malloc(sizeof(struct solution_struct));
+    best_neighb->cap_left = malloc(sizeof(int)*curt_sln->prob->dim);
+    best_neighb->x = malloc(sizeof(int)*curt_sln->prob->n);
+    copy_solution(best_neighb, curt_sln);
+    int n=curt_sln->prob->n;
+    int curt_move[] ={-1,-1,-1}, best_move []={-1,-1,-1}, delta=0, best_delta=0;  //storing best neighbourhood moves
+    //used for spliting the packed and unpacked items into two lists
+    int packed[n], unpacked[n];
+    int packed_index = 0;
+    int unpacked_index = 0;
+
+    //pair swap
+    //divide the items into 2 groups to reduce the time complexity
+    packed_index = 0; unpacked_index = 0;
+    for(int i = 0; i < n; i++){
+        if(curt_sln->x[i] == 1){
+            packed[packed_index] = i;
+            packed_index++;
+        }
+        else{
+            unpacked[unpacked_index] = i;
+            unpacked_index++;
+        }
+    }
+
+    for(int i=0; i<packed_index; i++){
+        for(int j=0; j<unpacked_index; j++){
+            curt_move[0]= packed[i]; curt_move[1]= unpacked[j]; curt_move[2]=-1;
+            if(can_move(nb_indx, &curt_move[0], best_neighb)){
+                delta = curt_sln->prob->items[unpacked[j]].p -curt_sln->prob->items[packed[i]].p;
+                if(delta > best_delta){
+                    best_delta = delta; best_move[0] = packed[i]; best_move[1] = unpacked[j]; best_move[2]=-1;
+                }
+            }
+        }
+    }
+    if(best_delta>0) { apply_move(nb_indx, &best_move[0], best_neighb);}
+    return best_neighb;
+}
+
+void random_select(struct solution_struct* swarm) {
+    for(int i=0; i<SWARM_SIZE; i++) {
+        int item1, item2;
+
+//        int swap_pair[SWARM_SIZE/15];
+//
+//        for(int j=0; j<(SWARM_SIZE/15); j++) {
+//            swap_pair[j] = rand_int(0, swarm[i].prob->n-1);
+//            if(swarm[i].x[swap_pair[j]]==0) {
+//                swarm[i].x[swap_pair[j]]=1;
+//            } else {
+//                j--;
+//            }
+//        }
+
+
+
+        item1 = rand_int(0, swarm[i].prob->n-1);
+        if(swarm[i].x[item1] ==1){
+            item2 = rand_int(0, swarm[i].prob->n-1);
+            while(swarm[i].x[item2] ==1){//careful, this might lead to deadloop
+                item2 = rand_int(0, swarm[i].prob->n-1);
+            }
+        }
+        else{
+            item2 = rand_int(0, swarm[i].prob->n-1);
+            while(swarm[i].x[item2] ==0){//careful, this might lead to deadloop
+                item2 = rand_int(0, swarm[i].prob->n-1);
+            }
+            int temp = item1;
+            item1 = item2;
+            item2 = temp;
+        }
+
+        swarm[i].x[item1]=0;
+        swarm[i].x[item2]=1;
+        feasibility_repair(&swarm[i]);
+    }
+}
+
+void best_descent(struct solution_struct* sln)
+{//using pair-swaps
+    for(int n=0; n<SWARM_SIZE; n++) {
+        int item1, item2;
+        int best_delta = -1000, b_item1=-1, b_item2=-1; //store the best move
+//        copy_solution(new_sln, &sln[i]);
+        for(int i=0; i<sln[n].prob->n; i++)
+        {
+            if(sln[n].x[i]>0){
+                item1 =i;
+                for(int j=0; j<sln[n].prob->n; j++){
+                    item2=j;
+                    int delta =sln[n].prob->items[item2].p -
+                            sln[n].prob->items[item1].p;
+                    if(delta >0 && delta>best_delta){   // 如果delta>0，说明新的利润>旧的，取新值
+                        b_item1 = item1; b_item2 = item2;
+                        best_delta= delta;
+                    }
+                }//endfor
+            }//endif
+        }//endfor
+
+        if(best_delta>0){
+            sln[n].x[b_item1]= 0;
+            sln[n].x[b_item2]= 1; //swap
+            sln[n].objective=sln[n].objective + best_delta;  //delta evaluation
+            //print_sol(new_sln, "Best Descent Solution");
+        }
+    }
+}
+
+
 
 
 /**
@@ -611,6 +684,7 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
         // ignore the feasibility of the particle
         for(int j=0; j<prob->n; j++) {
             sln[i].x[j] = rand()%2;
+//            update_best_solution(&sln[i]);
             sln[i].objective += sln[i].x[j] * sln[i].prob->items[j].p;
             sln[i].v[j] = rand_01();
         }
@@ -628,7 +702,28 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
     }
 //    printf("objective %f\n", best_sln.objective);
 }
-
+// compute the objective of each solution
+void update_objective(struct solution_struct* slt) {
+    slt->objective = 0;
+    feasibility_repair(slt);
+    for(int j=0; j<slt->prob->n; j++) {
+        slt->objective += slt->x[j] * slt->prob->items[j].p;
+    }
+    float penalty;
+    for(int i=0; i< slt->prob->dim; i++) {
+        float volume;
+        for(int j=0; j<slt->prob->n; j++) {
+            volume += slt->prob->items[j].size[i];
+        }
+        float x = volume-(slt->prob->capacities[i]);
+        if(x<0) {
+            penalty+=0;
+        }else {
+            penalty+=x;
+        }
+    }
+    slt->objective -= P * penalty;
+}
 
 void update(struct solution_struct* swarm){
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -667,8 +762,10 @@ void update(struct solution_struct* swarm){
                 swarm[i].x[j]=1;
             }
             // recalculate the objective
+//            update_objective(&swarm[i]);
             swarm[i].objective += swarm[i].x[j] * swarm[i].prob->items[j].p;
         }
+        feasibility_repair(&swarm[i]);
     }
 
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -750,7 +847,7 @@ void newUpdate2(struct solution_struct* swarm){
             double alpha = rand_01();
             struct solution_struct* curt_sln = &swarm[i];
 
-            struct solution_struct *neighbor_sln = best_descent(1, curt_sln);
+            struct solution_struct *neighbor_sln = best_descent_vns(1, curt_sln);
 
             // update velocity
             swarm[i].v[j] = w*(swarm[i].v[j] + pp*Cp*alpha*(swarm[i].personal_best->x[j]-swarm[i].x[j]) + (1-alpha)*(neighbor_sln->x[j]-swarm[i].x[j]) + pg*Cg*(best_sln.x[j]-swarm[i].x[j]));
@@ -874,6 +971,7 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
 }
 
 
+
 int PSO(struct problem_struct* prob) {
     START_TIME = clock();
     double time_spent=0;
@@ -887,9 +985,11 @@ int PSO(struct problem_struct* prob) {
     while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
 //        update(particle_swarm);
 
-        minority_subordinate_majority(particle_swarm);
-        newUpdate2(particle_swarm);
-//        update(particle_swarm);
+//        minority_subordinate_majority(particle_swarm);
+//        newUpdate2(particle_swarm);
+        update(particle_swarm);
+        random_select(particle_swarm);
+//        best_descent(particle_swarm);
 //        SimulatedAnnealing(&best_sln);
 
 
@@ -901,6 +1001,7 @@ int PSO(struct problem_struct* prob) {
         //printf("best: %f  worst: %f   iter: %d  time: %f\n", parent_pop[0].objective, parent_pop[POP_SIZE-1].objective, iter, time_spent);
     }
 //    feasibility_repair(&best_sln);
+//    printf("feasibility: %d\n", best_sln.feasibility);
 
 //     update_best_solution(particle_swarm);
 
