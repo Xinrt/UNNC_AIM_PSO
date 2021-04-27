@@ -413,161 +413,6 @@ void update_best_solution(struct solution_struct* sln)
 }
 
 
-//void one_swap(struct solution_struct* swarm) {
-//    for(int i=0; i<SWARM_SIZE; i++) {
-////        int swap_index;
-////        swap_index = rand_int(0, swarm[i].prob->n-1);
-////        if(swarm[i].x[swap_index]==1) {
-////            swarm[i].x[swap_index]=0;
-////        } else {
-////            swarm[i].x[swap_index]=1;
-////        }
-//
-//        int swap_pair[1];
-//        for(int j=0; j<1; j++) {
-//            swap_pair[j] = rand_int(0, swarm[i].prob->n-1);
-//            if(swarm[i].x[swap_pair[j]]==1) {
-//                swarm[i].x[swap_pair[j]]=0;
-//                int putIn = rand_int(0, swarm[i].prob->n-1);
-//                swarm[i].x[putIn]=1;
-//            } else {
-//                j--;
-//            }
-//        }
-//        feasibility_repair(&swarm[i]);
-//    }
-//}
-
-//void two_swap(struct solution_struct* swarm) {
-//    for(int i=0; i<SWARM_SIZE; i++) {
-//        int swap_pair[2];
-//        for(int j=0; j<2; j++) {
-//            swap_pair[j] = rand_int(0, swarm[i].prob->n-1);
-//            if(swarm[i].x[swap_pair[j]]==1) {
-//                swarm[i].x[swap_pair[j]]=0;
-//                int putIn = rand_int(0, swarm[i].prob->n-1);
-//                swarm[i].x[putIn]=1;
-//            } else {
-//                j--;
-//            }
-//        }
-//
-//        feasibility_repair(&swarm[i]);
-//    }
-//}
-
-
-
-//void three_swap(struct solution_struct* swarm) {
-//    for(int i=0; i<SWARM_SIZE; i++) {
-//        int swap_pair[3];
-//        for(int j=0; j<3; j++) {
-//            swap_pair[j] = rand_int(0, swarm[i].prob->n-1);
-//            if(swarm[i].x[swap_pair[j]]==1) {
-//                swarm[i].x[swap_pair[j]]=0;
-//                int putIn = rand_int(0, swarm[i].prob->n-1);
-//                swarm[i].x[putIn]=1;
-//            } else {
-//                j--;
-//            }
-//        }
-//
-//        feasibility_repair(&swarm[i]);
-//    }
-//}
-
-struct solution_struct * best_best_descent(int neighbor_index, struct solution_struct* sln) {
-
-    int item1, item2;
-    int swap_pair[neighbor_index];
-    int best_delta = -1000, b_item1=-1, b_item2=-1; //store the best move
-//        copy_solution(new_sln, &sln[i]);
-    for(int i=0; i<sln->prob->n; i++)
-    {
-        if(sln->x[i]>0){
-            item1 =i;
-            for(int j=0; j<sln->prob->n; j++){
-                item2=j;
-                int delta =sln->prob->items[item2].p -
-                           sln->prob->items[item1].p;
-                if(delta >0 && delta>best_delta){   // 如果delta>0，说明新的利润>旧的，取新值
-                    b_item1 = item1; b_item2 = item2;
-                    best_delta= delta;
-                }
-            }//endfor
-        }//endif
-    }//endfor
-
-    if(best_delta>0){
-        sln->x[b_item1]= 0;
-        sln->x[b_item2]= 1; //swap
-        sln->objective=sln->objective + (float)best_delta;  //delta evaluation
-        //print_sol(new_sln, "Best Descent Solution");
-    }
-}
-
-struct solution_struct* swap(int neighbor_index, struct solution_struct* curt_sln) {
-    struct solution_struct* neighbor = malloc(sizeof(struct solution_struct));
-    neighbor->cap_left = malloc(sizeof(int)*curt_sln->prob->dim);
-    neighbor->x = malloc(sizeof(int)*curt_sln->prob->n);
-    copy_solution(neighbor, curt_sln);
-    int n=curt_sln->prob->n;
-
-    int swap_pair[neighbor_index];
-    for(int j=0; j<neighbor_index; j++) {
-        swap_pair[j] = rand_int(0, neighbor->prob->n-1);
-        if(neighbor->x[swap_pair[j]]==1) {
-            neighbor->x[swap_pair[j]]=0;
-            int putIn = rand_int(0, neighbor->prob->n-1);
-            neighbor->x[putIn]=1;
-        } else {
-            j--;
-        }
-    }
-
-    feasibility_repair(neighbor);
-    return neighbor;
-}
-
-void VNS(struct solution_struct* swarm) {
-    for(int i = 0; i < SWARM_SIZE; i++){
-        int nb_index = 0; //neighbourhood index
-        STOP_TIME=clock();
-        double time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
-        struct solution_struct* curt_sln = &swarm[i];
-
-        while(time_spent < MAX_TIME && nb_index < 3){
-//            struct solution_struct* new_sln = swap(nb_index + 1, curt_sln);
-            struct solution_struct* new_sln = best_best_descent(nb_index + 1, curt_sln);
-
-//            printf("new: %f\n", new_sln->objective);
-//            printf("swarm: %f\n", swarm[i].objective);
-            if(new_sln->objective > swarm[i].objective){
-                copy_solution(curt_sln, new_sln);
-                nb_index=1;
-            } else {
-                nb_index++;
-            }
-
-        }
-        swarm[i] = *curt_sln;
-    }
-
-    for(int i=0; i<SWARM_SIZE; i++) {
-        // update personal best
-        if(swarm[i].objective>swarm[i].personal_best->objective) {
-            swarm[i].personal_best=&swarm[i];
-        }
-
-        //update global best
-        if(swarm[i].objective>best_sln.objective) {
-            best_sln=swarm[i];
-        }
-    }
-
-
-}
-
 void best_descent(struct solution_struct* sln) {//using pair-swaps
     for (int n = 0; n < SWARM_SIZE; n++) {
         int item1, item2;
@@ -596,7 +441,7 @@ void best_descent(struct solution_struct* sln) {//using pair-swaps
             //print_sol(new_sln, "Best Descent Solution");
 
         }
-
+        feasibility_repair(sln);
     }
     for(int i=0; i<SWARM_SIZE; i++) {
         // update personal best
@@ -734,7 +579,6 @@ int PSO(struct problem_struct* prob) {
     while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
         update(particle_swarm);
         best_descent(particle_swarm);
-        VNS(particle_swarm);
 
         iter++;
         STOP_TIME=clock();
@@ -752,6 +596,7 @@ int PSO(struct problem_struct* prob) {
 
 
 //    printf("best: %f  worst: %f   iter: %d  time: %f\n", best_sln.objective, particle_swarm[SWARM_SIZE-1].objective, iter, time_spent);
+//    printf("%d\n", best_sln.feasibility);
     printf("%f\n", best_sln.objective);
 
     return 0;
