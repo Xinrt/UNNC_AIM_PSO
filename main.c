@@ -302,6 +302,23 @@ int check_solutions(struct problem_struct** my_problems, char* solution_file)
     fclose(pfile);
     return 0;
 }
+//pop->x[pop->prob->items[j].index]
+void check_feasibility_afterSort(struct solution_struct* pop) {
+    pop->feasibility = 1;
+    struct item_struct* items_p = pop->prob->items;
+
+    for(int i=0; i< items_p->dim; i++)
+    {
+        pop->cap_left[i]=pop->prob->capacities[i];
+        for(int j=0; j<pop->prob->n; j++)
+        {
+            pop->cap_left[i] -= items_p[j].size[i]*pop->x[pop->prob->items[j].index];
+            if(pop->cap_left[i]<0) {
+                pop->feasibility = -1*i; //exceeding capacity
+            }
+        }
+    }
+}
 
 void check_feasibility(struct solution_struct* pop) {
     pop->feasibility = 1;
@@ -355,24 +372,15 @@ void feasibility_repair(struct solution_struct* pop)
 //    }
 //    printf("\n");
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc1);
-//    for(int m=0; m<pop->prob->n; m++) {
-//        printf("%d", pop->prob->items[m].index);
-////        printf("+%f ", pop->prob->items->ratio);
-//    }
-//    printf("\n");
-//    printf("------------------------------------------\n");
 
 
-    check_feasibility(pop);
+    check_feasibility_afterSort(pop);
 
     if(pop->feasibility<0) {
-//        printf("aaaaaaaa\n");
         for(int i=(pop->prob->n)-1; i>=0;i--){
-//            printf("f1: %d\n", pop->feasibility);
             if(pop->x[pop->prob->items[i].index] == 1) {
                 pop->x[pop->prob->items[i].index] = 0;
-                check_feasibility(pop);
-//                printf("f2: %d\n", pop->feasibility);
+                check_feasibility_afterSort(pop);
                 if(pop->feasibility>0) {
                     break;
                 }
@@ -382,16 +390,22 @@ void feasibility_repair(struct solution_struct* pop)
         for(int i=0; i<pop->prob->n;i++){
             if(pop->x[pop->prob->items[i].index] == 0) {
                 pop->x[pop->prob->items[i].index] = 1;
-                check_feasibility(pop);
+                check_feasibility_afterSort(pop);
                 if(pop->feasibility<0) {
                     pop->x[pop->prob->items[i].index] = 0;
-                    check_feasibility(pop);
+                    check_feasibility_afterSort(pop);
                     break;
                 }
             }
         }
     }
+
+//    check_feasibility_afterSort(pop);
+//    printf("%d", pop->feasibility);
+
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc2);
+//    check_feasibility(pop);
+//    printf("%d", pop->feasibility);
 //    for(int m=0; m<pop->prob->n; m++) {
 //        printf("%d", pop->prob->items[m].index);
 //    }
@@ -441,19 +455,26 @@ void best_descent(struct solution_struct* sln) {//using pair-swaps
             //print_sol(new_sln, "Best Descent Solution");
 
         }
-        feasibility_repair(sln);
+        feasibility_repair(&sln[n]);
     }
     for(int i=0; i<SWARM_SIZE; i++) {
         // update personal best
         if(sln[i].objective>sln[i].personal_best->objective) {
             sln[i].personal_best=&sln[i];
         }
+//        check_feasibility(&sln[i]);
+//        printf("%d ", sln[i].feasibility);
 
         //update global best
         if(sln[i].objective>best_sln.objective) {
-            best_sln=sln[i];
+            update_best_solution(&sln[i]);
+//            best_sln=sln[i];
         }
     }
+//    check_feasibility(&best_sln);
+//    printf("%d ", best_sln.feasibility);
+
+
 }
 
 
@@ -561,6 +582,12 @@ void update(struct solution_struct* swarm){
         //update global best
         if(swarm[i].objective>best_sln.objective) {
             best_sln=swarm[i];
+        }
+
+
+        check_feasibility(&swarm[i]);
+        if(swarm[i].feasibility<0) {
+            printf("%d ", swarm[i].feasibility);
         }
     }
 }
