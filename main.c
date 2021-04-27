@@ -21,6 +21,7 @@ int SWARM_SIZE=100;    // [20, 40]
 int MAX_NUM_OF_ITER = 10000;
 // range of particle's velocity and position
 const float V_MAX=10;
+float P = 100;
 
 
 // coefficient
@@ -157,6 +158,7 @@ struct solution_struct{
     // struct solution_struct* global_best;
     struct solution_struct* personal_best;
     float* v;   // velocity
+    float fitness;
 };
 
 void free_solution(struct solution_struct* sln)
@@ -351,7 +353,32 @@ int cmpfunc2 (const void * a, const void * b) {
     if(item1->index < item2->index) return -1;
     return 0;
 }
+// compute the fitness of each solution
+void fitness_calculate(struct solution_struct* sln) {
+    sln->fitness=0;
+    //poslin x
+    struct item_struct* items_p = sln->prob->items;
+    int total_size_particle = 0;
+    int total_size_package = 0;
+    int penalty;
+    for(int i=0; i< items_p->dim; i++)
+    {
+        sln->cap_left[i]=sln->prob->capacities[i];
+        for(int j=0; j<sln->prob->n; j++)
+        {
+            total_size_particle = total_size_particle+items_p[j].size[i]*sln->x[j];
+            total_size_package = total_size_package + sln->cap_left[i];
+        }
+    }
+    int x = total_size_particle-total_size_package;
+    if(x<0) {
+        penalty=0;
+    } else {
+        penalty=x;
+    }
 
+    sln->fitness = sln->objective - P*(float)penalty;
+}
 
 //modify the solutions that violate the capacity constraints
 void feasibility_repair(struct solution_struct* pop)
@@ -405,7 +432,9 @@ void feasibility_repair(struct solution_struct* pop)
 
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc2);
 //    check_feasibility(pop);
-//    printf("%d", pop->feasibility);
+//    if(pop->feasibility<0) {
+//        printf("%d", pop->feasibility);
+//    }
 //    for(int m=0; m<pop->prob->n; m++) {
 //        printf("%d", pop->prob->items[m].index);
 //    }
@@ -455,18 +484,20 @@ void best_descent(struct solution_struct* sln) {//using pair-swaps
             //print_sol(new_sln, "Best Descent Solution");
 
         }
-        feasibility_repair(&sln[n]);
+//        feasibility_repair(&sln[n]);
+        fitness_calculate(&sln[n]);
+
     }
     for(int i=0; i<SWARM_SIZE; i++) {
         // update personal best
-        if(sln[i].objective>sln[i].personal_best->objective) {
+        if(sln[i].fitness>sln[i].personal_best->fitness) {
             sln[i].personal_best=&sln[i];
         }
 //        check_feasibility(&sln[i]);
 //        printf("%d ", sln[i].feasibility);
 
         //update global best
-        if(sln[i].objective>best_sln.objective) {
+        if(sln[i].fitness>best_sln.fitness) {
             update_best_solution(&sln[i]);
 //            best_sln=sln[i];
         }
@@ -476,7 +507,6 @@ void best_descent(struct solution_struct* sln) {//using pair-swaps
 
 
 }
-
 
 
 
@@ -512,15 +542,26 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
             sln[i].objective += (float)sln[i].x[j] * (float)sln[i].prob->items[j].p;
             sln[i].v[j] = rand_01();
         }
-        feasibility_repair(&sln[i]);
+        fitness_calculate(&sln[i]);
+//        feasibility_repair(&sln[i]);
     }
 
-    // find the biggest objective and reassign the global best particle
+//    // find the biggest objective and reassign the global best particle
+//    best_sln=sln[0];    // initially assign first particle as global best
+//    float max_objective = sln[0].objective;
+//    for(int i=0; i<SWARM_SIZE; i++) {
+//        if(sln[i].objective>max_objective) {
+//            max_objective=sln[i].objective;
+//            best_sln=sln[i];
+//        }
+//    }
+
+// find the biggest fitness and reassign the global best particle
     best_sln=sln[0];    // initially assign first particle as global best
-    float max_objective = sln[0].objective;
+    float max_fitness= sln[0].fitness;
     for(int i=0; i<SWARM_SIZE; i++) {
-        if(sln[i].objective>max_objective) {
-            max_objective=sln[i].objective;
+        if(sln[i].fitness>max_fitness) {
+            max_fitness=sln[i].fitness;
             best_sln=sln[i];
         }
     }
@@ -569,25 +610,20 @@ void update(struct solution_struct* swarm){
             // recalculate the objective
 //            update_objective(&swarm[i]);
             swarm[i].objective += (float)swarm[i].x[j] * (float)swarm[i].prob->items[j].p;
+            fitness_calculate(&swarm[i]);
         }
-        feasibility_repair(&swarm[i]);
+//        feasibility_repair(&swarm[i]);
     }
 
     for(int i=0; i<SWARM_SIZE; i++) {
         // update personal best
-        if(swarm[i].objective>swarm[i].personal_best->objective) {
+        if(swarm[i].fitness>swarm[i].personal_best->fitness) {
             swarm[i].personal_best=&swarm[i];
         }
 
         //update global best
-        if(swarm[i].objective>best_sln.objective) {
+        if(swarm[i].fitness>best_sln.fitness) {
             best_sln=swarm[i];
-        }
-
-
-        check_feasibility(&swarm[i]);
-        if(swarm[i].feasibility<0) {
-            printf("%d ", swarm[i].feasibility);
         }
     }
 }
@@ -605,8 +641,7 @@ int PSO(struct problem_struct* prob) {
 
     while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
         update(particle_swarm);
-        best_descent(particle_swarm);
-
+//        best_descent(particle_swarm);
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
@@ -624,6 +659,17 @@ int PSO(struct problem_struct* prob) {
 
 //    printf("best: %f  worst: %f   iter: %d  time: %f\n", best_sln.objective, particle_swarm[SWARM_SIZE-1].objective, iter, time_spent);
 //    printf("%d\n", best_sln.feasibility);
+//    for(int m=0; m<SWARM_SIZE; m++) {
+//        check_feasibility(&particle_swarm[m]);
+//        if(particle_swarm[m].feasibility<0) {
+//            printf("%d\n", particle_swarm[m].feasibility);
+//        }
+//    }
+    feasibility_repair(&best_sln);
+    check_feasibility(&best_sln);
+    if(best_sln.feasibility<0) {
+        printf("%d ", best_sln.feasibility);
+    }
     printf("%f\n", best_sln.objective);
 
     return 0;
