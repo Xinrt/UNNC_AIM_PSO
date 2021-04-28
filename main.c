@@ -37,6 +37,8 @@ double w_max = 0.9;  // [0.4, 0.9]
 double w_min = 0.4;
 
 struct solution_struct best_sln;  //global best solution
+struct solution_struct average_pb_sln;  //average personal best solution
+
 
 
 //return a random number between 0 and 1
@@ -455,64 +457,6 @@ void update_best_solution(struct solution_struct* sln)
         copy_solution(&best_sln, sln);
 }
 
-
-void best_descent(struct solution_struct* sln) {//using pair-swaps
-    for (int n = 0; n < SWARM_SIZE; n++) {
-        int item1, item2;
-        int best_delta = -1000, b_item1 = -1, b_item2 = -1; //store the best move
-//        copy_solution(new_sln, &sln[i]);
-        for (int i = 0; i < sln[n].prob->n; i++) {
-            if (sln[n].x[i] > 0) {
-                item1 = i;
-                for (int j = 0; j < sln[n].prob->n; j++) {
-                    item2 = j;
-                    int delta = sln[n].prob->items[item2].p -
-                                sln[n].prob->items[item1].p;
-                    if (delta > 0 && delta > best_delta) {   // 如果delta>0，说明新的利润>旧的，取新值
-                        b_item1 = item1;
-                        b_item2 = item2;
-                        best_delta = delta;
-                    }
-                }//endfor
-            }//endif
-        }//endfor
-
-        if (best_delta > 0) {
-            sln[n].x[b_item1] = 0;
-            sln[n].x[b_item2] = 1; //swap
-            sln[n].objective = sln[n].objective + (float) best_delta;  //delta evaluation
-            //print_sol(new_sln, "Best Descent Solution");
-
-        }
-//        feasibility_repair(&sln[n]);
-        fitness_calculate(&sln[n]);
-
-    }
-    for(int i=0; i<SWARM_SIZE; i++) {
-        // update personal best
-        if(sln[i].fitness>sln[i].personal_best->fitness) {
-            sln[i].personal_best=&sln[i];
-        }
-//        check_feasibility(&sln[i]);
-//        printf("%d ", sln[i].feasibility);
-
-        //update global best
-        if(sln[i].fitness>best_sln.fitness) {
-            update_best_solution(&sln[i]);
-//            best_sln=sln[i];
-        }
-    }
-//    check_feasibility(&best_sln);
-//    printf("%d ", best_sln.feasibility);
-
-
-}
-
-
-
-
-
-
 /**
  * initialize particle swarm, give initial position, velocity, personal best and global best
  * ignore the feasibility of each particle
@@ -541,9 +485,10 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
 //            update_best_solution(&sln[i]);
             sln[i].objective += (float)sln[i].x[j] * (float)sln[i].prob->items[j].p;
             sln[i].v[j] = rand_01();
+//            sln[i].v[j] = (float)rand_int(5, 10);
         }
         fitness_calculate(&sln[i]);
-//        feasibility_repair(&sln[i]);
+        feasibility_repair(&sln[i]);
     }
 
 //    // find the biggest objective and reassign the global best particle
@@ -558,10 +503,15 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
 
 // find the biggest fitness and reassign the global best particle
     best_sln=sln[0];    // initially assign first particle as global best
-    float max_fitness= sln[0].fitness;
+//    float max_fitness= sln[0].fitness;
+    float max_obj= sln[0].objective;
     for(int i=0; i<SWARM_SIZE; i++) {
-        if(sln[i].fitness>max_fitness) {
-            max_fitness=sln[i].fitness;
+//        if(sln[i].fitness>max_fitness) {
+//            max_fitness=sln[i].fitness;
+//            best_sln=sln[i];
+//        }
+        if(sln[i].objective>max_obj) {
+            max_obj=sln[i].fitness;
             best_sln=sln[i];
         }
     }
@@ -592,7 +542,6 @@ void update(struct solution_struct* swarm){
             // update velocity
             swarm[i].v[j] = w*swarm[i].v[j] + pp*Cp*(swarm[i].personal_best->x[j]-swarm[i].x[j]) + pg*Cg*(best_sln.x[j]-swarm[i].x[j]);
 
-
             if(swarm[i].v[j]>V_MAX) {
                 swarm[i].v[j]=V_MAX;
             }
@@ -612,22 +561,125 @@ void update(struct solution_struct* swarm){
             swarm[i].objective += (float)swarm[i].x[j] * (float)swarm[i].prob->items[j].p;
             fitness_calculate(&swarm[i]);
         }
-//        feasibility_repair(&swarm[i]);
+        feasibility_repair(&swarm[i]);
     }
 
+//    for(int i=0; i<SWARM_SIZE; i++) {
+//        // update personal best
+//        if(swarm[i].fitness>swarm[i].personal_best->fitness) {
+//            swarm[i].personal_best=&swarm[i];
+//        }
+//
+//        //update global best
+//        if(swarm[i].fitness>best_sln.fitness) {
+//            best_sln=swarm[i];
+//        }
+//    }
     for(int i=0; i<SWARM_SIZE; i++) {
         // update personal best
-        if(swarm[i].fitness>swarm[i].personal_best->fitness) {
+        if(swarm[i].objective>swarm[i].personal_best->objective) {
             swarm[i].personal_best=&swarm[i];
         }
 
         //update global best
-        if(swarm[i].fitness>best_sln.fitness) {
+        if(swarm[i].objective>best_sln.objective) {
             best_sln=swarm[i];
         }
     }
 }
 
+void  minority_subordinate_majority(struct solution_struct* swarm){
+    float *float_average_pb = malloc(sizeof(float )*swarm->prob->n);
+//    int *average_pb = malloc(sizeof(int)*swarm->prob->n);
+    average_pb_sln.x = malloc(sizeof(int)*swarm->prob->n);
+    double alpha;
+    double beta;
+
+    // get the average personal best
+    for(int i=0; i<SWARM_SIZE; i++) {
+        for(int j=0; j<swarm->prob->n; j++) {
+            float_average_pb[j] += (float)swarm[i].personal_best->x[j];
+        }
+    }
+
+    for(int j=0; j<swarm->prob->n; j++) {
+        float_average_pb[j] = float_average_pb[j]/(float)SWARM_SIZE;
+//        printf("%f ", float_average_pb[j]);
+    }
+//    printf("\n");
+
+
+    // normalize average personal best into 0/1
+    for(int j=0; j<swarm->prob->n; j++) {
+//        printf("float_average_pb: %f\n", float_average_pb[j]);
+        if(float_average_pb[j]>=0.5) {
+            average_pb_sln.x[j]=1;
+        } else {
+            average_pb_sln.x[j]=0;
+        }
+//        printf("%d ", average_pb_sln.x[j]);
+    }
+
+    // Bayes formula
+    // P1: correctness of personal best
+    // P2: correctness of average personal best
+
+    for(int i=0; i<SWARM_SIZE; i++) {
+        int n_correctness_personal=0;
+        int n_correctness_avg_personal=0;
+        for (int j = 0; j < swarm[i].prob->n; j++) {
+            if (swarm[i].personal_best->x[j] == swarm->x[j]) {
+                n_correctness_personal++;
+            }
+            if (average_pb_sln.x[j] == swarm->x[j]) {
+                n_correctness_avg_personal++;
+            }
+        }
+
+//        printf("n: %d\n", n_correctness_personal);
+//        printf("total: %d\n", swarm[i].prob->n);
+        double P1 = (double) n_correctness_personal / swarm[i].prob->n;
+        double P2 = (double) n_correctness_avg_personal / swarm[i].prob->n;
+//        double P1 = 0.9;
+//        double P2 = 0.5;
+//        printf("P1: %f\n", P1);
+//        printf("P2: %f\n", P2);
+
+        alpha = (P1 * P2) / (P1 * P2 + (1 - P1) * (1 - P2));
+        beta = ((1 - P2) * P1) / ((1 - P1) * P2 + (1 - P2) * P1);
+//        printf("alpha: %f\n", alpha);
+//        printf("beta: %f\n", beta);
+//
+        for(int j=0; j<swarm->prob->n; j++) {
+            double r = rand();
+            if(average_pb_sln.x[j]==1 && swarm[i].personal_best->x[j]==1) {
+                if(r<alpha) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else if (average_pb_sln.x[j]==0 && swarm[i].personal_best->x[j]==0) {
+                if(r<(1-alpha)) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else if(average_pb_sln.x[j]==1 && swarm[i].personal_best->x[j]==0) {
+                if(r<beta) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            } else {
+                if(r<(1-beta)) {
+                    swarm[i].x[j]=1;
+                } else {
+                    swarm[i].x[j]=0;
+                }
+            }
+        }
+    }
+}
 
 int PSO(struct problem_struct* prob) {
     START_TIME = clock();
@@ -639,9 +691,10 @@ int PSO(struct problem_struct* prob) {
     // initialize the particle swarm
     initialize_particle_swarm(prob, particle_swarm);
 
-    while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
+//    while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
+    while(time_spent < MAX_TIME) {
+        minority_subordinate_majority(particle_swarm);
         update(particle_swarm);
-//        best_descent(particle_swarm);
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
@@ -665,7 +718,7 @@ int PSO(struct problem_struct* prob) {
 //            printf("%d\n", particle_swarm[m].feasibility);
 //        }
 //    }
-    feasibility_repair(&best_sln);
+//    feasibility_repair(&best_sln);
     check_feasibility(&best_sln);
     if(best_sln.feasibility<0) {
         printf("%d ", best_sln.feasibility);
