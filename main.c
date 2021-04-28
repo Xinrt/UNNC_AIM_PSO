@@ -17,10 +17,10 @@ int K= 2; // k-opt is used
 int VNS_SWAP_NUM = 10000;
 
 /* parameters for PSO algorithms */
-int SWARM_SIZE=100;    // [20, 40]
+int SWARM_SIZE=500;    // [20, 40]
 int MAX_NUM_OF_ITER = 10000;
 // range of particle's velocity and position
-const float V_MAX=10;
+//const float V_MAX=3;
 float P = 100;
 
 
@@ -33,10 +33,11 @@ double Cp_i = 2.5;   // <=2
 double Cp_f = 0.5;
 double Cg_f = 2.5;   // <=2
 double Cg_i = 0.5;
-double w_max = 0.9;  // [0.4, 0.9]
-double w_min = 0.4;
+double w_max = 1;  // [0.4, 0.9]
+double w_min = 0.2;
 
 struct solution_struct best_sln;  //global best solution
+struct solution_struct next_best_sln;  //global best solution
 struct solution_struct average_pb_sln;  //average personal best solution
 
 
@@ -456,6 +457,88 @@ void update_best_solution(struct solution_struct* sln)
     if(best_sln.objective < sln->objective)
         copy_solution(&best_sln, sln);
 }
+struct solution_struct* greedy_heuristic(struct problem_struct* prob)
+{
+    for(int i=0; i<prob->n;i++){
+        double avg_size=0;
+        struct item_struct* item_i = &prob->items[i];
+        for(int d=0; d< prob->dim; d++){
+            avg_size += (double)item_i->size[d]/prob->capacities[d];
+        }
+        item_i->ratio = item_i->p/avg_size;
+    }
+    qsort(prob->items, prob->n, sizeof(struct item_struct), cmpfunc1);
+
+    struct solution_struct* init_sln = malloc(sizeof(struct solution_struct));
+    init_sln->prob=prob;    init_sln->objective =0;
+    init_sln->x = malloc(sizeof(int)*prob->n);
+    init_sln->cap_left = malloc(sizeof(int)*prob->dim);
+    int* cap = malloc(sizeof(int)*prob->dim);
+    int i=0, d=0;
+    for(d=0; d<prob->dim; d++) cap[d]=0; //aggregated volume
+    for(i=0; i<prob->n; i++)
+    {
+        struct item_struct* item_i = &prob->items[i];
+        //printf("item[%d].ratio = %.3f\t",item_i->indx,prob->items[i].ratio);
+        for(d=0; d<prob->dim; d++){
+            if(cap[d] + item_i->size[d] > prob->capacities[d])
+                break; //infeasible to pack this item, try next
+        }
+        if(d>=prob->dim){
+            init_sln->x[item_i->index] = 1;
+            init_sln->objective += item_i->p;
+            for(d=0; d<prob->dim; d++){
+                cap[d] += item_i->size[d];
+            }
+            //printf("packing item %d\n", item_i->indx);
+        }
+        else init_sln->x[item_i->index] =0;
+    }
+    for(d=0; d<prob->dim; d++){
+        init_sln->cap_left[d] = prob->capacities[d]- cap[d];
+    }
+    free(cap);
+    //restore item original order by sorting by index.
+    qsort(prob->items, prob->n, sizeof(struct item_struct), cmpfunc2);
+
+    evaluate_solution(init_sln);
+    //output_solution(init_sln, "greedy_sln.txt");
+    //printf("Init_sln obj=\t%d\tfeasiblity = %d.\n", init_sln->objective, init_sln->feasibility);
+    return init_sln;
+}
+
+
+struct solution_struct* find_swarm(struct solution_struct* sln)
+{
+    struct solution_struct* new_sln = malloc(sizeof(struct solution_struct));
+    new_sln->cap_left = malloc(sizeof(int)*sln->prob->dim);
+    new_sln->x = malloc(sizeof(int)*sln->prob->n);
+    copy_solution(new_sln, sln);
+
+    for(int i=0; i<new_sln->prob->n;i++){
+        double avg_size=0;
+        struct item_struct* item_i = &new_sln->prob->items[i];
+        for(int d=0; d< new_sln->prob->dim; d++){
+            avg_size += (double)item_i->size[d]/new_sln->prob->capacities[d];
+        }
+        item_i->ratio = item_i->p/avg_size;
+    }
+    qsort(new_sln->prob->items, new_sln->prob->n, sizeof(struct item_struct), cmpfunc1);
+
+    // remove smallest one
+    for(int i=(new_sln->prob->n)-1; i>=0;i--){
+        if(new_sln->x[new_sln->prob->items[i].index] == 1) {
+            new_sln->x[new_sln->prob->items[i].index] = 0;
+        }
+    }
+
+    qsort(new_sln->prob->items, new_sln->prob->n, sizeof(struct item_struct), cmpfunc2);
+    new_sln->objective=0;
+    for(int m=0; m<new_sln->prob->n; m++) {
+        new_sln->objective += (float)new_sln->x[m] * (float)new_sln->prob->items[m].p;
+    }
+    return new_sln;
+}
 
 /**
  * initialize particle swarm, give initial position, velocity, personal best and global best
@@ -478,15 +561,33 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
         copy_solution(sln[i].personal_best, &sln[i]);
 //        sln[i].personal_best=&sln[i];
 
+        // find the big one
+//        struct solution_struct* curt_sln = greedy_heuristic(prob);
+//        copy_solution(&sln[0], curt_sln);
+
         // initialize value of particle's position, velocity and calculate the objective value
         // ignore the feasibility of the particle
         for(int j=0; j<prob->n; j++) {
             sln[i].x[j] = rand()%2;
+//            curt_sln = find_swarm(&sln[j]);
+//            copy_solution(&sln[j+1], curt_sln);
+
 //            update_best_solution(&sln[i]);
             sln[i].objective += (float)sln[i].x[j] * (float)sln[i].prob->items[j].p;
             sln[i].v[j] = rand_01();
 //            sln[i].v[j] = (float)rand_int(5, 10);
         }
+
+
+
+
+
+
+
+
+
+
+
         fitness_calculate(&sln[i]);
         feasibility_repair(&sln[i]);
     }
@@ -511,7 +612,7 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
 //            best_sln=sln[i];
 //        }
         if(sln[i].objective>max_obj) {
-            max_obj=sln[i].fitness;
+            max_obj=sln[i].objective;
             best_sln=sln[i];
         }
     }
@@ -520,27 +621,281 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
 
 
 
+void best_descent_swarm(struct solution_struct* sln) {//using pair-swaps
+    for (int n = 0; n < SWARM_SIZE; n++) {
+        int item1, item2;
+        int best_delta = -1000, b_item1 = -1, b_item2 = -1; //store the best move
+//        copy_solution(new_sln, &sln[i]);
+        for (int i = 0; i < sln[n].prob->n; i++) {
+            if (sln[n].x[i] > 0) {
+                item1 = i;
+                for (int j = 0; j < sln[n].prob->n; j++) {
+                    item2 = j;
+                    int delta = sln[n].prob->items[item2].p -
+                                sln[n].prob->items[item1].p;
+                    if (delta > 0 && delta > best_delta) {   // 如果delta>0，说明新的利润>旧的，取新值
+                        b_item1 = item1;
+                        b_item2 = item2;
+                        best_delta = delta;
+                    }
+                }//endfor
+            }//endif
+        }//endfor
+
+        if (best_delta > 0) {
+            sln[n].x[b_item1] = 0;
+            sln[n].x[b_item2] = 1; //swap
+            sln[n].objective = sln[n].objective + (float) best_delta;  //delta evaluation
+            //print_sol(new_sln, "Best Descent Solution");
+
+        }
+        feasibility_repair(&sln[n]);
+    }
+    for(int i=0; i<SWARM_SIZE; i++) {
+        // update personal best
+        if(sln[i].objective>sln[i].personal_best->objective) {
+            sln[i].personal_best=&sln[i];
+        }
+//        check_feasibility(&sln[i]);
+//        printf("%d ", sln[i].feasibility);
+
+        //update global best
+        if(sln[i].objective>best_sln.objective) {
+            update_best_solution(&sln[i]);
+//            best_sln=sln[i];
+        }
+    }
+//    check_feasibility(&best_sln);
+//    printf("%d ", best_sln.feasibility);
+
+
+}
+
+
+void particle_random_swap(struct solution_struct* pop) {
+    int swap_index;
+    swap_index = rand_int(0, pop->prob->n-1);
+    if(pop->x[swap_index]==1) {
+        pop->x[swap_index]=0;
+    } else {
+        pop->x[swap_index]=1;
+    }
+    feasibility_repair(pop);
+}
+void particle_random12_swap(struct solution_struct* pop) {
+    int swap_index;
+    int other2[2];
+    swap_index = rand_int(0, pop->prob->n-1);
+    if(pop->x[swap_index]==1) {
+        for (int i = 0; i < 2; i++) {
+            other2[i] = rand_int(0, pop->prob->n-1);
+            if(pop->x[other2[i]] == 0) {
+                pop->x[other2[i]] = 1;
+            } else {
+                i--;
+            }
+        }
+
+    }
+    feasibility_repair(pop);
+}
+void particle_best_descent_11(struct solution_struct* sln) {
+    //1-1
+    int item1, item2;
+    int best_delta = -1000, b_item1 = -1, b_item2 = -1; //store the best move
+//        copy_solution(new_sln, &sln[i]);
+    for (int i = 0; i < sln->prob->n; i++) {
+        if (sln->x[i] > 0) {
+            item1 = i;
+//            item1 = rand_int(0, sln->prob->n-1);
+            for (int j = 0; j < sln->prob->n; j++) {
+//                item2 = j;
+                item2 = rand_int(0, sln->prob->n-1);
+                if(sln->x[item2]==0) {
+                    int delta = sln->prob->items[item2].p -
+                                sln->prob->items[item1].p;
+                    if (delta > 0 && delta > best_delta) {   // 如果delta>0，说明新的利润>旧的，取新值
+                        b_item1 = item1;
+                        b_item2 = item2;
+                        best_delta = delta;
+                    }
+                }
+            }//endfor
+        }//endif
+    }//endfor
+
+    if (best_delta > 0) {
+        sln->x[b_item1] = 0;
+        sln->x[b_item2] = 1; //swap
+        sln->objective = sln->objective + (float) best_delta;  //delta evaluation
+        //print_sol(new_sln, "Best Descent Solution");
+
+    }
+    feasibility_repair(sln);
+}
+void particle_best_descent_12(struct solution_struct* sln) {
+    //1-1
+    int item1, item2, item3;
+    int best_delta = -1000, b_item1 = -1, b_item2 = -1, b_item3 = -1; //store the best move
+//        copy_solution(new_sln, &sln[i]);
+    for (int i = 0; i < sln->prob->n; i++) {
+        if (sln->x[i] > 0) {
+            item1 = i;
+//            item1 = rand_int(0, sln->prob->n-1);
+            for (int j = 0; j < sln->prob->n; j++) {
+//                item2 = j;
+                item2 = rand_int(0, sln->prob->n-1);
+                item3 = rand_int(0, sln->prob->n-1);
+                if(sln->x[item2]==0 && sln->x[item3]==0) {
+                    int delta = sln->prob->items[item2].p + sln->prob->items[item3].p -
+                                sln->prob->items[item1].p;
+                    if (delta > 0 && delta > best_delta) {   // 如果delta>0，说明新的利润>旧的，取新值
+                        b_item1 = item1;
+                        b_item2 = item2;
+                        b_item3 = item3;
+                        best_delta = delta;
+                    }
+                }
+            }//endfor
+        }//endif
+    }//endfor
+
+    if (best_delta > 0) {
+        sln->x[b_item1] = 0;
+        sln->x[b_item2] = 1; //swap
+        sln->x[b_item3] = 1; //swap
+        sln->objective = sln->objective + (float) best_delta;  //delta evaluation
+        //print_sol(new_sln, "Best Descent Solution");
+
+    }
+    feasibility_repair(sln);
+}
+void particle_best_descent_21(struct solution_struct* sln) {
+    //1-1
+    int item1, item2, item3;
+    int best_delta = -1000, b_item1 = -1, b_item2 = -1, b_item3 = -1; //store the best move
+//        copy_solution(new_sln, &sln[i]);
+    for (int i = 0; i < sln->prob->n; i++) {
+        if (sln->x[i] > 0) {
+            item1 = i;
+            item3 = rand_int(0, sln->prob->n-1);
+            if(sln->x[item3] > 0) {
+                for (int j = 0; j < sln->prob->n; j++) {
+//                item2 = j;
+                    item2 = rand_int(0, sln->prob->n-1);
+                    if(sln->x[item2]==0) {
+                        int delta = sln->prob->items[item2].p - sln->prob->items[item1].p -
+                                    sln->prob->items[item3].p;
+                        if (delta > 0 && delta > best_delta) {   // 如果delta>0，说明新的利润>旧的，取新值
+                            b_item1 = item1;
+                            b_item2 = item2;
+                            b_item3 = item3;
+                            best_delta = delta;
+                        }
+                    }
+                }//endfor
+            }
+        }//endif
+    }//endfor
+
+    if (best_delta > 0) {
+        sln->x[b_item1] = 0;
+        sln->x[b_item3] = 0;
+        sln->x[b_item2] = 1; //swap
+        sln->objective = sln->objective + (float) best_delta;  //delta evaluation
+        //print_sol(new_sln, "Best Descent Solution");
+
+    }
+    feasibility_repair(sln);
+}
+
+
+
+void random_swap(struct solution_struct* sln) {
+    int swap_index;
+    swap_index = rand_int(0, sln->prob->n-1);
+    if(sln->x[swap_index]==1) {
+        sln->x[swap_index]=0;
+    } else {
+        sln->x[swap_index]=1;
+    }
+    feasibility_repair(sln);
+}
+
 void update(struct solution_struct* swarm){
+    // get average objective
+    float total_objective = 0;
+    float min_objective = 0;
+    for(int i=0; i<SWARM_SIZE; i++) {
+        min_objective = swarm[0].objective;
+        if(swarm[i].objective<min_objective) {
+            min_objective=swarm[i].objective;
+        }
+        total_objective = total_objective + swarm[i].objective;
+    }
+    float avg_objective = total_objective/(float)SWARM_SIZE;
+
+    int mass=0;
+//    printf("avg: %f\n", avg_objective);
+    for(int i=0; i<SWARM_SIZE; i++) {
+//        printf("diff: %f\n", best_sln.objective/35);
+//        if((swarm[i].objective>avg_objective-(best_sln.objective/40)) && (swarm[i].objective<avg_objective+(best_sln.objective/40))) {
+        if((swarm[i].objective>avg_objective-(best_sln.objective/35)) && (swarm[i].objective<avg_objective+(best_sln.objective/35))) {
+            mass++;
+        }
+//        else if (swarm[i].objective<avg_objective+20) {
+//            printf("particle: %f\n", swarm[i].objective-avg_objective);
+//            mass++;
+//        }
+    }
+//    printf("mass: %d\n", mass);
+    if(mass > (round(SWARM_SIZE/2)-1)) {
+        for(int i=0; i<SWARM_SIZE; i++) {
+            if((swarm[i].objective>avg_objective-(best_sln.objective/35)) && (swarm[i].objective<avg_objective+(best_sln.objective/35))) {
+//                swarm[i]=best_sln;
+            }
+        }
+    }
 
     for(int i=0; i<SWARM_SIZE; i++) {
         swarm[i].objective = 0;   // before update each particle, clear its objective value
+        clock_t current_time = clock()/1000;
 
         for(int j=0; j<swarm->prob->n; j++) {
             float pp = rand_01();
             float pg = rand_01();
             float alpha = rand_01();
 
-            // update coefficient
-//            double w = (w_max-w_min)*((MAX_TIME-((double)(clock())/CLOCKS_PER_SEC))/MAX_TIME) + w_min;
-//            double Cp = (Cp_f-Cp_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cp_i;
-//            double Cg = (Cg_f-Cg_i)*((((double)(clock())/CLOCKS_PER_SEC)-1)/MAX_TIME) + Cg_i;
+            double w=1;
+            float Cp=2;
+            float Cg=2;
+            float V_MAX=5;
 
-            double w=0.7298;
-            double Cp=1.49618;
-            double Cg=1.49618;
+            // update coefficient
+            //线性
+//            printf("current: %ld\n", current_time);
+//            printf("max: %d\n", MAX_TIME);
+//            double w = w_max - (current_time*(w_max-w_min)/(MAX_TIME));
+            //自适应
+            // 如果objective集中于swarmsize/2个粒子object+-200,就确定他们集中
+//            double w;
+//            if(swarm[i].objective>avg_objective) {
+//                w = w_min - ((w_max-w_min)*(swarm[i].objective-min_objective)/(avg_objective-min_objective));
+//            } else {
+//                w = w_max;
+//            }
+
+//
+//            printf("w: %f, Cp: %f, Cg: %f\n", w, Cp, Cg);
+
+
+
+//            double K=0.729;
 
             // update velocity
-            swarm[i].v[j] = w*swarm[i].v[j] + pp*Cp*(swarm[i].personal_best->x[j]-swarm[i].x[j]) + pg*Cg*(best_sln.x[j]-swarm[i].x[j]);
+            swarm[i].v[j] = w*swarm[i].v[j] + pp*Cp*(float)(swarm[i].personal_best->x[j]-swarm[i].x[j]) + pg*Cg*(float)(best_sln.x[j]-swarm[i].x[j]);
+//            swarm[i].v[j] = K*(swarm[i].v[j] + pp*Cp*(swarm[i].personal_best->x[j]-swarm[i].x[j]) + pg*Cg*(best_sln.x[j]-swarm[i].x[j]));
+
 
             if(swarm[i].v[j]>V_MAX) {
                 swarm[i].v[j]=V_MAX;
@@ -586,6 +941,11 @@ void update(struct solution_struct* swarm){
             best_sln=swarm[i];
         }
     }
+//    if((next_best_sln.objective-best_sln.objective)<1000) {
+//
+//    } else {
+//        best_sln = next_best_sln;
+//    }
 }
 
 void  minority_subordinate_majority(struct solution_struct* swarm){
@@ -681,6 +1041,74 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
     }
 }
 
+struct solution_struct* neighbor_select(int i, struct solution_struct* pop) {
+//    if(i==1) {
+//        particle_random_swap(pop);
+//    } else if (i==2){
+//        particle_best_descent_11(pop);
+//    } else if (i==3){
+//        particle_best_descent_12(pop);
+//    } else if (i==4){
+//        particle_best_descent_21(pop);
+//    }
+    if(i==1) {
+        particle_best_descent_11(pop);
+    } else if (i==2){
+        particle_best_descent_12(pop);
+    }
+    return pop;
+}
+
+void VNS(struct solution_struct* swarm) {
+    for(int i = 0; i < SWARM_SIZE; i++){
+        float ratio = rand_01();
+        if(ratio >= 1){
+            continue;
+        }
+        int nb_indx = 0; //neighbourhood index
+        STOP_TIME=clock();
+        double time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
+        struct solution_struct* curt_sln = &swarm[i];
+
+        while(time_spent < MAX_TIME && nb_indx<2){
+            struct solution_struct* neighbors = neighbor_select(nb_indx+1, curt_sln); //best solution in neighbourhood nb_indx
+            feasibility_repair(neighbors);
+            check_feasibility(neighbors);
+            if(neighbors->feasibility<0) {
+                printf("after vns\n");
+            }
+            if(neighbors->objective > curt_sln->objective){
+                copy_solution(curt_sln, neighbors);
+                nb_indx=1;
+            }
+            else {
+                nb_indx++;
+            }
+        }
+        swarm[i] = *curt_sln;
+        feasibility_repair(&swarm[i]);
+    }
+
+    for(int i=0; i<SWARM_SIZE; i++) {
+        // update personal best
+        if(swarm[i].objective>swarm[i].personal_best->objective) {
+            swarm[i].personal_best=&swarm[i];
+        }
+//        check_feasibility(&sln[i]);
+//        printf("%d ", sln[i].feasibility);
+
+        //update global best
+        if(swarm[i].objective>best_sln.objective) {
+            best_sln=swarm[i];
+        }
+
+        check_feasibility(&best_sln);
+        if(best_sln.feasibility<0) {
+            printf("in VNS\n");
+        }
+    }
+}
+
 int PSO(struct problem_struct* prob) {
     START_TIME = clock();
     double time_spent=0;
@@ -693,8 +1121,9 @@ int PSO(struct problem_struct* prob) {
 
 //    while(iter<MAX_NUM_OF_ITER && time_spent < MAX_TIME) {
     while(time_spent < MAX_TIME) {
-        minority_subordinate_majority(particle_swarm);
+//        minority_subordinate_majority(particle_swarm);
         update(particle_swarm);
+        VNS(particle_swarm);
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
@@ -710,7 +1139,7 @@ int PSO(struct problem_struct* prob) {
 //    printf("gap: %f  worst: %f   iter: %d  time: %f\n", (particle_swarm->prob->optimal-particle_swarm[0].objective)/particle_swarm->prob->optimal, (particle_swarm->prob->optimal-particle_swarm[SWARM_SIZE-1].objective)/particle_swarm->prob->optimal, iter, time_spent);
 
 
-//    printf("best: %f  worst: %f   iter: %d  time: %f\n", best_sln.objective, particle_swarm[SWARM_SIZE-1].objective, iter, time_spent);
+
 //    printf("%d\n", best_sln.feasibility);
 //    for(int m=0; m<SWARM_SIZE; m++) {
 //        check_feasibility(&particle_swarm[m]);
@@ -723,6 +1152,7 @@ int PSO(struct problem_struct* prob) {
     if(best_sln.feasibility<0) {
         printf("%d ", best_sln.feasibility);
     }
+//    printf("best: %f iter: %d time: %f\n", best_sln.objective, iter, time_spent);
     printf("%f\n", best_sln.objective);
 
     return 0;
