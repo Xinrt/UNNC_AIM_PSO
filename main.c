@@ -903,6 +903,7 @@ void update(struct solution_struct* swarm){
 //            double Cp=1.49618;
 //            double Cg=1.49618;
             float V_MAX=5;
+//            float V_MIN=0;
 
             double K=0.729;
 
@@ -1090,7 +1091,7 @@ int initialize_particle_swarm(struct problem_struct* prob, struct solution_struc
             sln[i].objective += (float)sln[i].x[j] * (float)sln[i].prob->items[j].p;
             sln[i].v[j] = rand_01();
 //            sln[i].v[j] = -1+2*rand_01();
-//            sln[i].v[j] = (float)rand_int(5, 10);
+//            sln[i].v[j] = (float)rand_int(0, 5);
         }
 
 //        fitness_calculate(&sln[i]);
@@ -1174,7 +1175,8 @@ int PSO(struct problem_struct* prob) {
 //        random_swap(&particle_swarm[rand_index2]);
         int rand_index = rand_int(0, SWARM_SIZE-1);
         random_swap(&particle_swarm[rand_index]);
-        update_global_best(particle_swarm);
+//        particle_best_descent_11(&particle_swarm[rand_index]);
+//        update_global_best(particle_swarm);
 //        VNS(particle_swarm);
         iter++;
         STOP_TIME=clock();
