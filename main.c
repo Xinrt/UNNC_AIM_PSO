@@ -1054,8 +1054,8 @@ void VNS(struct solution_struct* swarm) {
         if(swarm[i].objective>swarm[i].personal_best->objective) {
             copy_solution(swarm[i].personal_best, &swarm[i]);
         }
-        update_best_solution(&swarm[i]);
     }
+    update_global_best(swarm);
 
 //    for(int i=0; i<SWARM_SIZE; i++) {
 //
@@ -1095,7 +1095,7 @@ int PSO(struct problem_struct* prob) {
     while(time_spent < MAX_TIME) {
         update(particle_swarm);
         VNS(particle_swarm);
-
+//        particle_best_descent_11(&best_sln);
 
 
 
