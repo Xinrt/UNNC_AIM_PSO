@@ -826,6 +826,51 @@ void best_descent_pb(struct solution_struct* sln) {
     feasibility_repair(sln);
 }
 
+struct solution_struct* neighbor_select(int i, struct solution_struct* pop) {
+//    if(i==1) {
+//        particle_random_swap(pop);
+//    } else if (i==2){
+//        particle_best_descent_11(pop);
+//    } else if (i==3){
+//        particle_best_descent_12(pop);
+//    } else if (i==4){
+//        particle_best_descent_21(pop);
+//    }
+    if(i==1) {
+        particle_best_descent_11(pop);
+    } else if (i==2){
+        particle_best_descent_12(pop);
+    }
+    return pop;
+}
+
+
+void particle_VNS(struct solution_struct* sln) {
+
+    int nb_index = 0; //neighbourhood index
+    STOP_TIME=clock();
+    double time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
+    struct solution_struct* curt_sln = sln;
+
+    while(time_spent < MAX_TIME && nb_index<2){
+        struct solution_struct* neighbors = neighbor_select(nb_index+1, curt_sln); //best solution in neighbourhood nb_indx
+        feasibility_repair(neighbors);
+        check_feasibility(neighbors);
+        if(neighbors->feasibility<0) {
+            printf("after vns\n");
+        }
+        if(neighbors->objective > curt_sln->objective){
+            copy_solution(curt_sln, neighbors);
+            nb_index=1;
+        }
+        else {
+            nb_index++;
+        }
+    }
+    sln = curt_sln;
+    feasibility_repair(sln);
+}
+
 
 struct solution_struct* update_global_best(struct solution_struct* swarm){
     for(int i=0; i<SWARM_SIZE; i++) {
@@ -836,7 +881,7 @@ struct solution_struct* update_global_best(struct solution_struct* swarm){
 
         copy_solution(new_sln, &swarm[i]);
         particle_best_descent_11(new_sln);
-
+//        particle_VNS(new_sln);
         if(new_sln->objective>best_sln.objective) {
             feasibility_repair(new_sln);
             copy_solution(&best_sln, new_sln);
@@ -1011,23 +1056,6 @@ void  minority_subordinate_majority(struct solution_struct* swarm){
     }
 }
 
-struct solution_struct* neighbor_select(int i, struct solution_struct* pop) {
-//    if(i==1) {
-//        particle_random_swap(pop);
-//    } else if (i==2){
-//        particle_best_descent_11(pop);
-//    } else if (i==3){
-//        particle_best_descent_12(pop);
-//    } else if (i==4){
-//        particle_best_descent_21(pop);
-//    }
-    if(i==1) {
-        particle_best_descent_11(pop);
-    } else if (i==2){
-        particle_best_descent_12(pop);
-    }
-    return pop;
-}
 
 /**
  * initialize particle swarm, give initial position, velocity, personal best and global best
@@ -1146,6 +1174,7 @@ int PSO(struct problem_struct* prob) {
 //        random_swap(&particle_swarm[rand_index2]);
         int rand_index = rand_int(0, SWARM_SIZE-1);
         random_swap(&particle_swarm[rand_index]);
+        update_global_best(particle_swarm);
 //        VNS(particle_swarm);
         iter++;
         STOP_TIME=clock();
