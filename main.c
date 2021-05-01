@@ -309,7 +309,42 @@ int cmpfunc2 (const void * a, const void * b) {
     return 0;
 }
 
-void check_feasibility(bool ratio, struct solution_struct* pop) {
+void check_feasibility_afterSort(struct solution_struct* pop) {
+    pop->feasibility = 1;
+    struct item_struct* items_p = pop->prob->items;
+
+    for(int i=0; i< items_p->dim; i++)
+    {
+        pop->cap_left[i]=pop->prob->capacities[i];
+        for(int j=0; j<pop->prob->n; j++)
+        {
+            pop->cap_left[i] -= items_p[j].size[i]*pop->x[pop->prob->items[j].index];
+            if(pop->cap_left[i]<0) {
+                pop->feasibility = -1*i; //exceeding capacity
+            }
+        }
+    }
+}
+
+void check_feasibility(struct solution_struct* pop) {
+    pop->feasibility = 1;
+    struct item_struct* items_p = pop->prob->items;
+
+    for(int i=0; i< items_p->dim; i++)
+    {
+        pop->cap_left[i]=pop->prob->capacities[i];
+        for(int j=0; j<pop->prob->n; j++)
+        {
+            pop->cap_left[i] -= items_p[j].size[i]*pop->x[j];
+            if(pop->cap_left[i]<0) {
+                pop->feasibility = -1*i; //exceeding capacity
+            }
+        }
+    }
+}
+
+
+void check_feasibility2(bool ratio, struct solution_struct* pop) {
     pop->feasibility = 1;
     struct item_struct* items_p = pop->prob->items;
 
@@ -324,12 +359,66 @@ void check_feasibility(bool ratio, struct solution_struct* pop) {
                 pop->cap_left[i] -= items_p[j].size[i]*pop->x[j];
             }
             if(pop->cap_left[i]<0) {
-                pop->feasibility = -1*i; //exceeding capacity
+                pop->feasibility = -1; //exceeding capacity
             }
         }
     }
 }
 
+
+void feasibility_repair2(struct solution_struct* slt) {
+    // sort the items with the ratio
+    for(int i=0; i<slt->prob->n;i++) {
+        double avg_size=0;
+        struct item_struct* item_i = &slt->prob->items[i];
+        for(int d=0; d< slt->prob->dim; d++){
+            avg_size += (double)item_i->size[d]/slt->prob->capacities[d];
+        }
+        item_i->ratio = item_i->p/avg_size;
+    }
+    qsort(slt->prob->items, slt->prob->n, sizeof(struct item_struct), cmpfunc1);
+
+    // check the feasiblity of the best solution
+    // gain more profit if it is already feasible, else reduce the items to make it feasible
+    check_feasibility_afterSort(slt);
+    if(slt->feasibility == 1) { // if it not exceed the capacity
+        for(int j = 0; j < slt->prob->n; j++){
+            if(slt->x[slt->prob->items[j].index] == 0) {
+                slt->x[slt->prob->items[j].index] = 1;
+                check_feasibility_afterSort(slt);
+                if(slt->feasibility == -1) {
+                    slt->x[slt->prob->items[j].index] = 0;
+                    check_feasibility_afterSort(slt);
+                    break;
+                }
+            }
+        }
+    }else { // if it exceed the capacity
+        for(int j = (slt->prob->n)-1; j >= 0; j--){
+            if(slt->x[slt->prob->items[j].index] == 1) {
+                slt->x[slt->prob->items[j].index] = 0;
+                check_feasibility_afterSort(slt);
+                if(slt->feasibility == 1) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // sort the items with the index
+    qsort(slt->prob->items, slt->prob->n, sizeof(struct item_struct), cmpfunc2);
+
+    // update the feasibility and the objective
+    check_feasibility(slt);
+    slt->objective=0;
+    for(int m=0; m<slt->prob->n; m++) {
+        slt->objective += (float)slt->x[m] * (float)slt->prob->items[m].p;
+    }
+
+    if(slt->feasibility<=0) {
+        printf("in repair\n");
+    }
+}
 //modify the solutions that violate the capacity constraints
 void feasibility_repair(struct solution_struct* pop) {
     for(int i=0; i<pop->prob->n;i++){
@@ -350,13 +439,15 @@ void feasibility_repair(struct solution_struct* pop) {
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc1);
 
 
-    check_feasibility(true, pop);
+//    check_feasibility2(true, pop);
+    check_feasibility_afterSort(pop);
 
-    if(pop->feasibility<0) {
+    if(pop->feasibility<=0) {
         for(int i=(pop->prob->n)-1; i>=0;i--){
             if(pop->x[pop->prob->items[i].index] == 1) {
                 pop->x[pop->prob->items[i].index] = 0;
-                check_feasibility(true, pop);
+//                check_feasibility2(true, pop);
+                check_feasibility_afterSort(pop);
                 if(pop->feasibility>0) {
                     break;
                 }
@@ -366,10 +457,10 @@ void feasibility_repair(struct solution_struct* pop) {
         for(int i=0; i<pop->prob->n;i++){
             if(pop->x[pop->prob->items[i].index] == 0) {
                 pop->x[pop->prob->items[i].index] = 1;
-                check_feasibility(true, pop);
-                if(pop->feasibility<0) {
+//                check_feasibility2(true, pop);
+                check_feasibility_afterSort(pop);
+                if(pop->feasibility<=0) {
                     pop->x[pop->prob->items[i].index] = 0;
-                    check_feasibility(true, pop);
                     break;
                 }
             }
@@ -380,7 +471,7 @@ void feasibility_repair(struct solution_struct* pop) {
 //    printf("%d", pop->feasibility);
 
     qsort(pop->prob->items, pop->prob->n, sizeof(struct item_struct), cmpfunc2);
-//    check_feasibility(pop);
+//    check_feasibility2(pop);
 //    if(pop->feasibility<0) {
 //        printf("%d", pop->feasibility);
 //    }
@@ -391,6 +482,10 @@ void feasibility_repair(struct solution_struct* pop) {
     pop->objective=0;
     for(int m=0; m<pop->prob->n; m++) {
         pop->objective += (float)pop->x[m] * (float)pop->prob->items[m].p;
+    }
+    check_feasibility(pop);
+    if(pop->feasibility<=0) {
+        printf("in repair");
     }
 //    printf("feasibility: %d\n", pop->feasibility);
 }
@@ -675,6 +770,7 @@ struct solution_struct* select_neighbor(int neighbor_index, struct solution_stru
     } else if (neighbor_index == 3) {
         best_new=best_descent_21(pop);
     }
+
     return best_new;
 }
 
@@ -693,13 +789,34 @@ void VNS_search(struct solution_struct* pop){
             } else {
                 nb_index++;
             }
+
+            int idx = rand_int(0, (curt_sln->prob->n)-1);
+//            if(curt_sln->x[idx] == 0) {
+//                curt_sln->x[idx] = 1;
+//                check_feasibility2(false, curt_sln);
+//                if(curt_sln->feasibility < 0) {
+//                    curt_sln->x[idx] = 0;
+//                }
+//            } else {
+//                curt_sln->x[idx] = 0;
+//            }
+
+            free_solution(neighbor);
+            free(neighbor);
         }
 
         pop[i] = *curt_sln;
+        feasibility_repair(&pop[i]);
+
         if(pop[i].objective>pop[i].personal_best->objective) {
             copy_solution(pop[i].personal_best, &pop[i]);
         }
         update_best_solution(&pop[i]);
+
+        check_feasibility(&pop[i]);
+        if(pop[i].feasibility<=0) {
+            printf("in VNS\n");
+        }
     }
 }
 void update(struct solution_struct* swarm){
@@ -735,7 +852,8 @@ void update(struct solution_struct* swarm){
         // repair
         feasibility_repair(&swarm[i]);
         //check feasibility
-        check_feasibility(false, &swarm[i]);
+//        check_feasibility2(false, &swarm[i]);
+        check_feasibility(&swarm[i]);
         if(swarm[i].feasibility<0) {
             printf("infeasible particle %d in update position\n", i);
         }
@@ -750,7 +868,15 @@ void update(struct solution_struct* swarm){
 
         //update global best
         update_best_solution(&swarm[i]);
+
+        check_feasibility(&swarm[i]);
+        if(swarm[i].feasibility<=0) {
+            printf("in update\n");
+        }
+
     }
+
+
 //    update_global_best(swarm);
 }
 
@@ -791,7 +917,8 @@ void initialize_particle_swarm(struct problem_struct* prob, struct solution_stru
         // repair feasibility of each particle
         feasibility_repair(&sln[i]);
         // check feasibility
-        check_feasibility(false, &sln[i]);
+//        check_feasibility2(false, &sln[i]);
+        check_feasibility(&sln[i]);
         if(sln[i].feasibility<0) {
             printf("infeasible particle %d in initialize_particle_swarm\n", i);
         }
@@ -810,31 +937,37 @@ int PSO(struct problem_struct* prob) {
     // initialize the particle swarm
     initialize_particle_swarm(prob, particle_swarm);
 
-//    while(iter<138 && time_spent < MAX_TIME) {
     while(time_spent < MAX_TIME) {
         update(particle_swarm);
+        check_feasibility(&best_sln);
+        if(best_sln.feasibility<=0) {
+            printf("before VNS\n");
+        }
         VNS_search(particle_swarm);
-        if(best_sln.feasibility<0) {
-            feasibility_repair(&best_sln);
+        check_feasibility(&best_sln);
+        if(best_sln.feasibility<=0) {
+            printf("after VNS\n");
         }
         iter++;
         STOP_TIME=clock();
         time_spent = (double)(STOP_TIME-START_TIME)/CLOCKS_PER_SEC;
-        //printf("best: %f  worst: %f   iter: %d  time: %f\n", parent_pop[0].objective, parent_pop[POP_SIZE-1].objective, iter, time_spent);
     }
-//    printf("feasibility: %d\n", best_sln.feasibility);
 
-    //printf("optimal: %d\n", parent_pop->prob->optimal);
-//    printf("gap: %f  worst: %f   iter: %d  time: %f\n", (parent_pop->prob->optimal-parent_pop[0].objective)/parent_pop->prob->optimal, (parent_pop->prob->optimal-parent_pop[POP_SIZE-1].objective)/parent_pop->prob->optimal, iter, time_spent);
-//    printf("gap: %f  worst: %f   iter: %d  time: %f\n", (particle_swarm->prob->optimal-particle_swarm[0].objective)/particle_swarm->prob->optimal, (particle_swarm->prob->optimal-particle_swarm[SWARM_SIZE-1].objective)/particle_swarm->prob->optimal, iter, time_spent);
-
-
-    check_feasibility(false, &best_sln);
+    if(best_sln.feasibility<=0) {
+        feasibility_repair(&best_sln);
+    }
+//    check_solutions()
+//    check_feasibility2(false, &best_sln);
+    check_feasibility(&best_sln);
     if(best_sln.feasibility<0) {
         printf("global best is not feasible, before print\n");
     }
-    printf("best: %f iter: %d time: %f\n", best_sln.objective, iter, time_spent);
-//    printf("%f\n", best_sln.objective);
+//    printf("best: %f iter: %d time: %f\n", best_sln.objective, iter, time_spent);
+    printf("%f\n", best_sln.objective);
+//    for(int i=0; i<SWARM_SIZE; i++) {
+//        free_solution(&particle_swarm[i]);
+//        free(&particle_swarm[i]);
+//    }
 
     return 0;
 
@@ -869,7 +1002,6 @@ int main(int argc, const char * argv[]) {
             else if(strcmp(argv[i],"-t")==0)
                 MAX_TIME = atoi(argv[i+1]);
         }
-        //printf("data_file= %s, output_file= %s, sln_file=%s, max_time=%d", data_file, out_file, solution_file, MAX_TIME);
     }
     struct problem_struct** my_problems = load_problems(data_file);
 
@@ -885,11 +1017,7 @@ int main(int argc, const char * argv[]) {
             {
                 srand(RAND_SEED[run]);
                 PSO(my_problems[k]);   // call PSO method
-//                printf("something wrong before!\n");
-
             }
-//           s feasibility_repair(&best_sln);
-//            printf("best: %f  problem: %d\n", best_sln.objective, k);
              output_solution(&best_sln,out_file);
         }
     }
